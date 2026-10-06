@@ -1,0 +1,26 @@
+[project]
+name = "opendoor-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.142.2",
+    "httpx>=0.28.1",
+    "livekit-agents[silero,turn-detector]>=1.8.5",
+    "livekit-api>=1.2.1",
+    "pillow>=12.3.0",
+    "pillow-heif>=1.8.0",
+    "python-dotenv>=1.2.4",
+    "uvicorn>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests", "."]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]

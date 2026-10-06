@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seller pipeline · Opendoor demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div><a class="wordmark" href="/">opendoor</a><span class="demo">demo</span></div>
+  <nav class="nav"><span class="hide-sm">Seller ops</span><span class="live"><span class="dot" id="dot"></span><span id="live">Live</span></span></nav>
+</header>
+<main class="wrap">
+  <p class="eyebrow">Seller ops · local only</p>
+  <h1>Seller pipeline</h1>
+  <p class="lede">Every home inquiry from calls and texts to <span id="agent-number">the AgentPhone number</span>, updating live.</p>
+
+  <section class="stats" id="stats"></section>
+
+  <div class="chips" id="sellers" role="group" aria-label="Filter by seller"></div>
+  <div style="height:16px"></div>
+  <section class="board" id="board" aria-label="Pipeline board"></section>
+</main>
+<script>
+let last = null, seen = {}, filter = null;
+try { filter = Number(localStorage.getItem("pipeline-filter")) || null; } catch {}
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ago = (iso) => { const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+  return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`; };
+
+function card(h) {
+  const cover = h.cover ? `<img src="${esc(h.cover)}" alt="">` : "No photos yet";
+  const facts = [h.timeline ? `Selling ${esc(h.timeline)}` : null, `${h.photos} photo${h.photos === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
+  const missing = h.missing.length ? `<div class="meta">Missing: ${esc(h.missing.join(", "))}</div>` : "";
+  return `<a class="card home-card" href="${esc(h.url)}" data-id="${h.id}">
+    <div class="cover">${cover}</div>
+    <div class="body">
+      <span class="pill s${h.stage}">${esc(h.stage_label)}</span>
+      <div class="title">${esc(h.short)}</div>
+      <div class="meta">${facts}</div>${missing}
+      <div class="seller"><span>${esc(h.seller)}</span><span>${esc(h.phone)}</span></div>
+      <div class="meta" style="margin-top:4px">Updated ${ago(h.updated_at)}</div>
+    </div></a>`;
+}
+
+function render(d) {
+  document.getElementById("stats").innerHTML = [
+    ["Sellers", d.stats.sellers], ["Homes", d.stats.homes], ["Photos", d.stats.photos], ["Ready for review", d.stats.ready],
+  ].map(([l, n]) => `<div class="card stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+
+  const chips = [`<button class="chip" aria-pressed="${!filter}" data-seller="">All sellers</button>`]
+    .concat(d.sellers.map((s) => `<button class="chip" aria-pressed="${filter === s.id}" data-seller="${s.id}">${esc(s.name)} · ${s.homes}</button>`));
+  document.getElementById("sellers").innerHTML = chips.join("");
+
+  const homes = d.homes.filter((h) => !filter || h.seller_id === filter);
+  document.getElementById("board").innerHTML = d.stages.map((label, i) => {
+    const items = homes.filter((h) => h.stage === i);
+    return `<div class="col"><div class="col-head"><span>${esc(label)}</span><span class="count">${items.length}</span></div>
+      ${items.map(card).join("") || '<div class="empty">Nothing here yet</div>'}</div>`;
+  }).join("");
+
+  // Highlight homes that changed since the last poll.
+  for (const h of d.homes) {
+    if (seen[h.id] && seen[h.id] !== h.updated_at + h.stage + h.photos) {
+      document.querySelector(`[data-id="${h.id}"]`)?.classList.add("ring");
+    }
+    seen[h.id] = h.updated_at + h.stage + h.photos;
+  }
+  last = d;
+}
+
+document.getElementById("sellers").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-seller]"); if (!b) return;
+  filter = Number(b.dataset.seller) || null;
+  try { localStorage.setItem("pipeline-filter", filter || ""); } catch {}
+  if (last) render(last);
+});
+
+async function poll() {
+  try {
+    const r = await fetch("/api/pipeline", { cache: "no-store" });
+    if (!r.ok) throw 0;
+    const d = await r.json();
+    if (!last || JSON.stringify(d) !== JSON.stringify(last)) render(d);
+    document.getElementById("dot").classList.remove("off"); document.getElementById("live").textContent = "Live";
+  } catch {
+    document.getElementById("dot").classList.add("off"); document.getElementById("live").textContent = "Reconnecting…";
+  }
+  setTimeout(poll, 2000);
+}
+poll();
+</script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your homes · Opendoor demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div><a class="wordmark" href="/s/__TOKEN__">opendoor</a><span class="demo">demo</span></div>
+  <nav class="nav"><span class="hide-sm">Your homes</span><span class="live"><span class="dot" id="dot"></span><span id="live">Live</span></span></nav>
+</header>
+<main class="wrap narrow">
+  <p class="eyebrow" id="hello">Welcome back</p>
+  <h1>Your homes</h1>
+  <p class="lede" id="lede"></p>
+  <div style="height:24px"></div>
+  <section class="grid" id="homes"></section>
+  <p class="note">Demo page. Offers come from an Opendoor specialist after review; nothing here is a price quote.</p>
+</main>
+<script>
+const TOKEN = "__TOKEN__";
+let last = null, seen = {};
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function render(d) {
+  document.getElementById("hello").textContent = d.first_name ? `Welcome back, ${d.first_name}` : "Welcome back";
+  document.getElementById("lede").innerHTML =
+    `${d.homes.length} home${d.homes.length === 1 ? "" : "s"} in progress. To add another or send photos, text <b>${esc(d.agent_number)}</b>.`;
+  document.getElementById("homes").innerHTML = d.homes.map((h) => `
+    <a class="card home-card" href="${esc(h.url)}" data-id="${h.id}">
+      <div class="cover">${h.cover ? `<img src="${esc(h.cover)}" alt="">` : "Text photos to add them"}</div>
+      <div class="body">
+        <span class="pill s${h.stage}">${esc(h.stage_label)}</span>
+        <div class="title">${esc(h.short)}</div>
+        <div class="meta">${[h.timeline ? `Selling ${esc(h.timeline)}` : null, `${h.photos} photo${h.photos === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</div>
+        ${h.missing.length ? `<div class="meta">Still need: ${esc(h.missing.join(", "))}</div>` : ""}
+      </div>
+    </a>`).join("");
+  for (const h of d.homes) {
+    const sig = h.updated_at + h.stage + h.photos;
+    if (seen[h.id] && seen[h.id] !== sig) document.querySelector(`[data-id="${h.id}"]`)?.classList.add("ring");
+    seen[h.id] = sig;
+  }
+  last = d;
+}
+
+async function poll() {
+  try {
+    const r = await fetch(`/s/${TOKEN}/data`, { cache: "no-store" });
+    if (!r.ok) throw 0;
+    const d = await r.json();
+    if (!last || JSON.stringify(d) !== JSON.stringify(last)) render(d);
+    document.getElementById("dot").classList.remove("off"); document.getElementById("live").textContent = "Live";
+  } catch {
+    document.getElementById("dot").classList.add("off"); document.getElementById("live").textContent = "Reconnecting…";
+  }
+  setTimeout(poll, 2000);
+}
+poll();
+</script>
+</body>
+</html>
